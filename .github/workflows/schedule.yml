@@ -1,0 +1,16 @@
+name: Scheduled build
+
+# The full build weekly, with no change to blame: a base image, a toolchain
+# patch or a Postgres release can break what passed last week.
+
+on:
+  schedule:
+    - cron: "23 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
