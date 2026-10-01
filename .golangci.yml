@@ -1,0 +1,30 @@
+# See https://golangci-lint.run/usage/configuration/
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags: [integration]
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - errcheck
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+    - gosec
+  settings:
+    errcheck:
+      # A failed Close on a read path or in a defer has no one to tell.
+      exclude-functions:
+        - (io.Closer).Close
+        - (*github.com/jackc/pgx/v5.Conn).Close
+        - (net.Listener).Close
+        - (github.com/jackc/pgx/v5.Rows).Close
+  exclusions:
+    rules:
+      # Tests request URLs they built themselves.
+      - path: _test\.go
+        linters: [gosec]

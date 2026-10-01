@@ -1,0 +1,27 @@
+name: Pull request
+
+on:
+  pull_request:
+    branches: [main]
+
+# A second push to the same branch makes the first run's answer worthless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  # The only required status check (branch protection): it depends on every
+  # check, so adding a job to build.yml needs no settings change.
+  pull-request:
+    name: Pull request success
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: "true"

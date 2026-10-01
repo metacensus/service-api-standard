@@ -1,0 +1,11 @@
+.git
+.github
+.gitignore
+.golangci.yml
+Makefile
+README.md
+AGENTS.md
+Dockerfile
+.dockerignore
+scripts
+integration

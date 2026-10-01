@@ -1,0 +1,3 @@
+# Build output. `go build` without -o drops the binary next to the package.
+/service
+/bin/
