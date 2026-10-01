@@ -2,18 +2,16 @@
 
 Decisions with no single declaration to sit beside. Per-declaration detail is a comment beside the code; the [README](README.md) orients an operator.
 
-## What this service is
-
-A `store.Store` over Postgres, wired into [`metacensus/api`](https://github.com/metacensus/api)'s `go/service`. HTTP, the auth flow, id and `recorded` minting, password hashing and `Kind`→status mapping all live in `go/service`; this repository owns persistence, configuration, migrations, the image and their tests. A route is added in the contract first, then given a store method here.
+A route is added in the contract first, then given a store method here.
 
 ## Storage: whole records, constraint columns
 
 Each signed record is stored whole as protojson (`go/contract.MarshalOptions`) in a `jsonb` column; only the fields a constraint needs are lifted into real columns. Two reasons:
 
-- **Reads return the record exactly as written** (`store.go`, "Verification is inherited"), down to the nanosecond. `timestamptz` keeps microseconds; the protojson string keeps all nine digits, and the conformance suite checks it.
+- **Reads return the record exactly as written** (api's `go/store`, "Verification is inherited"), down to the nanosecond. `timestamptz` keeps microseconds; the protojson string keeps all nine digits, and the conformance suite checks it.
 - **A field added to the contract needs no migration.** Only a new table, index or constraint does.
 
-Key history lives in `user_keys`. Uniqueness and parent existence are constraints. Emails are compared byte-exact: folding case here would make this backend disagree with `service-api-chain`.
+Emails are compared byte-exact: folding case here would make this backend disagree with `service-api-chain`.
 
 ## Migrations
 
@@ -26,9 +24,9 @@ The answer to `dev-testing-go`'s open isolation question, for this repository:
 - **A template database**: migrations run once into it, and every database a test touches is cloned from it. `pgtest` owns the container; pick `Shared` or `Fresh` by its doc.
 - **Not a transaction per test**: every store method commits its own transaction, so a test cannot wrap it. **Not a schema per test**: it couples the code under test to `search_path` and re-runs migrations each time.
 
-For an assistant writing a new store test: prove a promise of `store.go` by adding it to `storetest` in `metacensus/api`, not here. Test here only what is Postgres's — a constraint, a SQLSTATE mapping, a migration — and pick `Shared` unless the assertion reads state the test did not write.
+For an assistant writing a new store test: prove a promise of api's `go/store` by adding it to `storetest` in `metacensus/api`, not here. Test here only what is Postgres's — a constraint, a SQLSTATE mapping, a migration — and pick `Shared` unless the assertion reads state the test did not write.
 
 ## Not yet
 
-- **Sessions** are `auth.MemorySessions`: a restart logs everyone out and the service runs as one replica. A Postgres `auth.Sessions` follows once the port takes a context and `api` ships a `sessiontest` suite.
+- **Sessions** are `auth.MemorySessions`: a restart logs everyone out and the service runs as one replica. A Postgres `auth.Sessions`, proven by api's `sessiontest`, is next.
 - **CORS** is the operator's (see `metacensus/api` README, "Open questions").

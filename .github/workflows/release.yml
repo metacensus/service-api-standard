@@ -3,15 +3,12 @@ name: Release
 on:
   push:
     tags:
-      # Not `v*`: globs would match a stray tag named `v`.
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
   contents: read
 
 jobs:
-  # The suite every pull request ran, re-run at the tagged commit; gates the
-  # publish below.
   verify:
     name: Verify
     uses: ./.github/workflows/build.yml
@@ -24,7 +21,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # One clear line instead of a login failure, and no value ever printed.
       - name: Require the Docker Hub token
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

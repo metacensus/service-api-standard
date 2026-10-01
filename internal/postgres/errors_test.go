@@ -14,7 +14,7 @@ import (
 	"github.com/metacensus/api/go/store"
 )
 
-func TestKindOf_Error(t *testing.T) {
+func TestKindOf(t *testing.T) {
 	pg := func(code string) error { return fmt.Errorf("wrapped: %w", &pgconn.PgError{Code: code}) }
 	errSentinel := errors.New("encode failure")
 
@@ -51,7 +51,7 @@ func TestKindOf_Error(t *testing.T) {
 	}
 }
 
-func TestFail_Error(t *testing.T) {
+func TestFail(t *testing.T) {
 	cause := &pgconn.PgError{Code: "23505"}
 	other := errors.New("boom")
 

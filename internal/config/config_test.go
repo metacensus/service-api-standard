@@ -56,9 +56,9 @@ func TestLoad(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Load(func(key string) string { return tt.env[key] })
 			if tt.wantProblems != nil {
-				var cfgErr *Error
+				var cfgErr *configError
 				if !errors.As(err, &cfgErr) {
-					t.Fatalf("err = %v, want *Error", err)
+					t.Fatalf("err = %v, want *configError", err)
 				}
 				if !reflect.DeepEqual(cfgErr.Problems, tt.wantProblems) {
 					t.Errorf("problems = %q, want %q", cfgErr.Problems, tt.wantProblems)

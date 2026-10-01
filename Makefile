@@ -1,20 +1,13 @@
-# service-api-standard. Run from the repository root.
-
 .PHONY: help build run test test-race test-adapter test-artifact test-integration \
         fmt fmt-check vet tidy-check golangci vuln lint check hooks docker-build \
-        release release-major release-minor release-patch latest list delete-tag
+        release release-major release-minor release-patch latest
 
 .DEFAULT_GOAL := help
 
 IMAGE     ?= metacensus/service-api-standard
 IMAGE_TAG ?= dev
 
-# Prebuilt image for `test-artifact`; empty means build it first. CI sets it.
-SERVICE_IMAGE ?=
-
 # Read out of go.mod so no copy can drift from what CI's setup-go uses.
-# GOTOOLCHAIN= with an empty value is silently accepted, so guard and fail
-# loudly rather than run unpinned.
 GOTOOLCHAIN_PIN ?= $(shell awk '/^toolchain /{t=$$2} /^go /{if (g == "") g = "go" $$2} END{print (t != "" ? t : g)}' go.mod)
 ifeq ($(GOTOOLCHAIN_PIN),)
 $(error could not read the Go toolchain from go.mod; refusing to run unpinned)
@@ -51,9 +44,6 @@ test-race:
 test-adapter:
 	go test -tags=integration -race -count=1 -timeout 15m ./...
 
-# Exercises the image that ships: it refuses to boot misconfigured, boots
-# against Postgres, and serves the API. testcontainers starts the containers;
-# the image is SERVICE_IMAGE when set, else built here first.
 ## test-artifact — the built image against Postgres (needs Docker; SERVICE_IMAGE skips the build)
 test-artifact:
 	@image='$(SERVICE_IMAGE)'; \
@@ -61,8 +51,7 @@ test-artifact:
 		$(MAKE) --no-print-directory docker-build; \
 		image='$(IMAGE):$(IMAGE_TAG)'; \
 	fi; \
-	cd integration && SERVICE_IMAGE="$$image" \
-		go test -tags=integration -count=1 -timeout 15m ./...
+	SERVICE_IMAGE="$$image" go test -tags=artifact -count=1 -timeout 15m ./integration/...
 
 ## test-integration — the adapter suite, then the artifact suite
 test-integration: test-adapter test-artifact
@@ -78,23 +67,19 @@ fmt-check:
 		echo "gofmt would rewrite:"; echo "$$unformatted"; exit 1; \
 	fi
 
-## vet — go vet, integration-tagged code included, in both modules
+## vet — go vet, integration- and artifact-tagged code included
 vet:
 	go vet ./...
 	go vet -tags=integration ./...
-	cd integration && go vet -tags=integration ./...
+	go vet -tags=artifact ./...
 
-## tidy-check — fail if go mod tidy would change either module
+## tidy-check — fail if go mod tidy would change go.mod or go.sum
 tidy-check:
-	@for dir in . integration; do \
-		echo "Checking $$dir go.mod/go.sum are tidy..."; \
-		(cd $$dir && go mod tidy -diff) || exit 1; \
-	done
+	go mod tidy -diff
 
-## golangci — golangci-lint over both modules, from .golangci.yml
+## golangci — golangci-lint, from .golangci.yml
 golangci:
 	go run $(GOLANGCI_LINT) run ./...
-	cd integration && go run $(GOLANGCI_LINT) run -c ../.golangci.yml ./...
 
 ## lint — formatting, vet, module freshness and golangci-lint
 lint: fmt-check vet tidy-check golangci
@@ -114,19 +99,6 @@ hooks:
 ## docker-build — build the image for this machine's arch
 docker-build:
 	docker build -t $(IMAGE):$(IMAGE_TAG) .
-
-# ---------------------------------------------------------------------------
-# Release
-#
-# Tagging is the whole trigger: release.yml re-runs CI at the tag, then
-# publishes the multi-arch image. The version is derived and validated rather
-# than typed, and a duplicate tag is refused before it is created -- a
-# re-pushed tag would republish a different commit under a version consumers
-# have pinned.
-#
-# `set -e` and the empty-VERSION check matter: without them a failing
-# version.sh still tags and pushes `v`, a tag release.yml never matches.
-# ---------------------------------------------------------------------------
 
 VERSION ?=
 TYPE    ?= patch
@@ -167,17 +139,4 @@ release-patch:
 
 ## latest — print the most recent version tag
 latest:
-	@git tag -l "v*" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$$" | sort -V | tail -1
-
-## list — print every version tag
-list:
-	@git tag -l "v*" | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$$" | sort -V
-
-## delete-tag — delete TAG=vX.Y.Z locally and on the remote
-delete-tag:
-	@if [ -z "$(TAG)" ]; then \
-		echo "Usage: make delete-tag TAG=v1.2.3"; \
-		exit 1; \
-	fi; \
-	git tag -d $(TAG) && \
-	git push origin :refs/tags/$(TAG)
+	@bash -c '. scripts/version.sh && get_latest_version'

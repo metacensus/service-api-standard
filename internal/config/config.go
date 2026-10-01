@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const DefaultPort = 3001
+const defaultPort = 3001
 
 type Config struct {
 	Port int
@@ -16,20 +16,20 @@ type Config struct {
 	DatabaseURL string
 }
 
-// Error carries every problem found in one pass, so a container that refuses
+// configError carries every problem found in one pass, so a container that refuses
 // to start says so once rather than once per missing variable.
-type Error struct {
+type configError struct {
 	Problems []string
 }
 
-func (e *Error) Error() string {
+func (e *configError) Error() string {
 	return "invalid configuration:\n  - " + strings.Join(e.Problems, "\n  - ")
 }
 
 func Load(getenv func(string) string) (*Config, error) {
 	var problems []string
 
-	port := DefaultPort
+	port := defaultPort
 	if raw := strings.TrimSpace(getenv("PORT")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 || parsed > 65535 {
@@ -45,7 +45,7 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 
 	if len(problems) > 0 {
-		return nil, &Error{Problems: problems}
+		return nil, &configError{Problems: problems}
 	}
 	return &Config{Port: port, DatabaseURL: dsn}, nil
 }

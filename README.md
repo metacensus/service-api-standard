@@ -2,7 +2,7 @@
 
 The MetaCensus API over Postgres. It implements [`metacensus/api`](https://github.com/metacensus/api)'s persistence port, `store.Store`, and serves it through that module's shared server, `go/service`. Its sibling, `service-api-chain`, serves the same contract over Hyperledger Fabric.
 
-`go/service` owns the HTTP surface, the auth flow and the status codes; this repository owns persistence, configuration, migrations and the image. Design decisions are in [AGENTS.md](AGENTS.md).
+`go/service` owns the handlers, the auth flow and the status codes; this repository owns persistence, configuration, migrations, the process that serves the handlers, and the image. Design decisions are in [AGENTS.md](AGENTS.md).
 
 ## Endpoints
 
@@ -29,14 +29,6 @@ DATABASE_URL=postgres://postgres:dev@localhost:5432/postgres make run
 ```
 
 `make help` lists every target; `make check` runs what CI runs.
-
-## Tests
-
-- **`make test`** — unit tests: configuration, routing, error mapping, content validation.
-- **`make test-adapter`** — the store against Postgres in a container, including `metacensus/api`'s `storetest` conformance suite, the store's primary proof.
-- **`make test-artifact`** — the built image against Postgres: refusing to boot, then sign-up through a vote over HTTP with real signatures.
-
-The adapter and artifact suites need Docker.
 
 ## Releasing
 

@@ -1,6 +1,3 @@
--- Each signed record is stored whole in `record`; only what a constraint needs
--- is lifted into columns (AGENTS.md, "Storage").
-
 CREATE TABLE users (
     id            text  PRIMARY KEY,
     email         text  NOT NULL UNIQUE,

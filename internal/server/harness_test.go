@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bytes"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/metacensus/api/go/service"
@@ -15,6 +17,24 @@ import (
 // fakeStore stands in for persistence. Embedding the nil interface makes any
 // store call a loud panic: these tests reach routing, never the store.
 type fakeStore struct{ store.Store }
+
+// logBuffer is a goroutine-safe io.Writer.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *logBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *logBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
 
 type harness struct {
 	t    *testing.T

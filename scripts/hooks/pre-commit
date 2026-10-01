@@ -1,3 +1,2 @@
 #!/bin/sh
-# Opt-in (`make hooks`). Checks, never rewrites; CI is the enforcement.
 exec make fmt-check vet

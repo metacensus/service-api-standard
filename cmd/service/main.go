@@ -34,7 +34,6 @@ func run(logger *slog.Logger) int {
 		return 1
 	}
 
-	// SIGTERM is what a container runtime sends first; SIGINT is Ctrl-C.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 

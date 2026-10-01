@@ -49,7 +49,7 @@ func kindOf(err error) store.Kind {
 }
 
 // fail attaches op to err for logs, keeping its Kind if it has one; nil stays nil. A bare
-// Kind (a refusal raised here) passes through as memstore returns it.
+// Kind (a refusal raised here) passes through unwrapped.
 func fail(op string, err error) error {
 	if err == nil {
 		return nil

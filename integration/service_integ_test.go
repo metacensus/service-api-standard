@@ -1,4 +1,4 @@
-//go:build integration
+//go:build artifact
 
 // Package integration exercises the built image, not the handlers.
 package integration
@@ -44,24 +44,19 @@ const (
 	bootTimeout = 90 * time.Second
 )
 
-// serviceRequest is the container request for the image under test, preferring
-// a prebuilt image so CI does not build twice.
-func serviceRequest(env map[string]string, waitFor wait.Strategy) testcontainers.ContainerRequest {
-	req := testcontainers.ContainerRequest{
+// serviceRequest is the container request for the image under test.
+func serviceRequest(t *testing.T, env map[string]string, waitFor wait.Strategy) testcontainers.ContainerRequest {
+	t.Helper()
+	image := os.Getenv("SERVICE_IMAGE")
+	if image == "" {
+		t.Fatal("SERVICE_IMAGE unset; run make test-artifact")
+	}
+	return testcontainers.ContainerRequest{
+		Image:        image,
 		ExposedPorts: []string{servicePort},
 		Env:          env,
 		WaitingFor:   waitFor,
 	}
-	if image := os.Getenv("SERVICE_IMAGE"); image != "" {
-		req.Image = image
-	} else {
-		req.FromDockerfile = testcontainers.FromDockerfile{
-			Context:    "..",
-			Dockerfile: "Dockerfile",
-			KeepImage:  true,
-		}
-	}
-	return req
 }
 
 // start runs req, and on failure prints the container's logs before it is
@@ -133,7 +128,7 @@ func TestRefusesToBoot(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			container := start(t, ctx, serviceRequest(tc.env, wait.ForExit().WithExitTimeout(bootTimeout)))
+			container := start(t, ctx, serviceRequest(t, tc.env, wait.ForExit().WithExitTimeout(bootTimeout)))
 
 			state, err := container.State(ctx)
 			if err != nil {
@@ -153,7 +148,7 @@ func TestServes(t *testing.T) {
 	netName := newNetwork(t, ctx)
 	startPostgres(t, ctx, netName)
 
-	req := serviceRequest(map[string]string{"DATABASE_URL": dbURL},
+	req := serviceRequest(t, map[string]string{"DATABASE_URL": dbURL},
 		wait.ForHTTP("/healthz").WithPort(servicePort).WithStartupTimeout(bootTimeout))
 	req.Networks = []string{netName}
 	container := start(t, ctx, req)

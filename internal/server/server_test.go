@@ -1,38 +1,18 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	apiserver "github.com/metacensus/api/go/server"
 	"github.com/metacensus/api/go/server/routes"
 )
-
-// logBuffer is a goroutine-safe io.Writer.
-type logBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (l *logBuffer) Write(p []byte) (int, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.buf.Write(p)
-}
-
-func (l *logBuffer) String() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.buf.String()
-}
 
 // panicking mounts one route that panics.
 type panicking struct{}
