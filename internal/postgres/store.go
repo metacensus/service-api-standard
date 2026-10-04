@@ -23,6 +23,9 @@ func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 func (s *Store) EnrollUser(ctx context.Context, record *v1.UserSigned, publicKey, passwordHash string) error {
 	const op = "EnrollUser"
+	if _, err := store.ParseID(store.UserID, record.GetId()); err != nil {
+		return err
+	}
 	keyID := record.GetUserSignature().GetKeyId()
 	if _, err := signing.EnrolledKey(publicKey, keyID); err != nil {
 		return store.InvalidContent
@@ -65,6 +68,9 @@ func (s *Store) ListUsers(ctx context.Context) ([]*v1.UserSigned, error) {
 
 func (s *Store) CreateTopic(ctx context.Context, callerID string, record *v1.TopicSigned) error {
 	return write(ctx, s.pool, "CreateTopic", callerID, record, func(tx pgx.Tx, doc []byte) error {
+		if _, err := store.ParseID(store.TopicID, record.GetId()); err != nil {
+			return err
+		}
 		_, err := tx.Exec(ctx, `INSERT INTO topics (id, record) VALUES ($1, $2)`, record.GetId(), doc)
 		return err
 	})
@@ -80,6 +86,9 @@ func (s *Store) ListTopics(ctx context.Context) ([]*v1.TopicSigned, error) {
 
 func (s *Store) CreateProp(ctx context.Context, callerID string, record *v1.PropSigned) error {
 	return write(ctx, s.pool, "CreateProp", callerID, record, func(tx pgx.Tx, doc []byte) error {
+		if _, err := store.ParseID(store.PropID, record.GetId()); err != nil {
+			return err
+		}
 		if err := validateProp(record); err != nil {
 			return err
 		}

@@ -64,8 +64,9 @@ func TestStore_NulInContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	userID := store.NewID(store.UserID)
 	user := &v1.UserSigned{
-		Id:            "u",
+		Id:            userID,
 		Content:       &v1.User{Email: "u@example.test"},
 		UserSignature: &v1.Signature{KeyId: keyID},
 	}
@@ -73,8 +74,8 @@ func TestStore_NulInContent(t *testing.T) {
 		t.Fatalf("EnrollUser: %v", err)
 	}
 
-	topic := &v1.TopicSigned{Id: "t", Content: &v1.Topic{Name: "a\x00b"}, UserSignature: &v1.Signature{KeyId: keyID}}
-	if err := s.CreateTopic(ctx, "u", topic); store.KindOf(err) != store.InvalidContent {
+	topic := &v1.TopicSigned{Id: store.NewID(store.TopicID), Content: &v1.Topic{Name: "a\x00b"}, UserSignature: &v1.Signature{KeyId: keyID}}
+	if err := s.CreateTopic(ctx, userID, topic); store.KindOf(err) != store.InvalidContent {
 		t.Errorf("CreateTopic = %v, want InvalidContent", err)
 	}
 }
