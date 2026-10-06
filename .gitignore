@@ -1,3 +1,6 @@
 # Build output. `go build` without -o drops the binary next to the package.
 /service
 /bin/
+
+# Per-developer Claude Code settings.
+.claude/settings.local.json
