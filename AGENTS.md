@@ -19,7 +19,7 @@ Forward-only: a released migration is never edited; fix forward with a new one. 
 
 ## Testing against Postgres
 
-The answer to `dev-testing-go`'s open isolation question, for this repository:
+How tests here are isolated from each other:
 
 - **A template database**: migrations run once into it, and every database a test touches is cloned from it. `pgtest` owns the container; pick `Shared` or `Fresh` by its doc.
 - **Not a transaction per test**: every store method commits its own transaction, so a test cannot wrap it. **Not a schema per test**: it couples the code under test to `search_path` and re-runs migrations each time.
