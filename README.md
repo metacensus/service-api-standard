@@ -33,3 +33,7 @@ DATABASE_URL=postgres://postgres:dev@localhost:5432/postgres make run
 ## Releasing
 
 `make release-patch` / `release-minor` / `release-major` tag and push; `release.yml` re-runs CI at the tag and publishes `docker.io/metacensus/service-api-standard` for amd64 and arm64. It needs the `DOCKERHUB_TOKEN` secret, a Docker Hub organization access token with write access to that repository.
+
+## License
+
+AGPL-3.0-only ([LICENSE](LICENSE)).
