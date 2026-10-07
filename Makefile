@@ -1,6 +1,6 @@
 .PHONY: help build run test test-race test-adapter test-artifact test-integration \
         fmt fmt-check vet tidy-check golangci vuln lint check hooks docker-build \
-        release release-major release-minor release-patch latest
+        release latest
 
 .DEFAULT_GOAL := help
 
@@ -104,19 +104,11 @@ VERSION ?=
 TYPE    ?= patch
 
 ## release — tag and push the next version (TYPE=patch|minor|major, or VERSION=1.2.3)
-release: scripts/version.sh
+release:
 	@set -e; \
 	VERSION=$$(./scripts/version.sh "$(VERSION)" "$(TYPE)"); \
-	if [ -z "$$VERSION" ]; then \
-		echo "Error: version.sh produced no version; refusing to tag"; \
-		exit 1; \
-	fi; \
 	TAG="v$$VERSION"; \
 	MSG="Release $$VERSION"; \
-	if git rev-parse "$$TAG" >/dev/null 2>&1; then \
-		echo "Error: Tag $$TAG already exists"; \
-		exit 1; \
-	fi; \
 	if git ls-remote --exit-code --tags origin "refs/tags/$$TAG" >/dev/null 2>&1; then \
 		echo "Error: Tag $$TAG already exists on origin"; \
 		exit 1; \
@@ -124,18 +116,6 @@ release: scripts/version.sh
 	git tag -a "$$TAG" -m "$$MSG" && \
 	git push origin "$$TAG" && \
 	echo "Released: $$TAG"
-
-## release-major — release, bumping the major
-release-major:
-	@$(MAKE) release TYPE=major
-
-## release-minor — release, bumping the minor
-release-minor:
-	@$(MAKE) release TYPE=minor
-
-## release-patch — release, bumping the patch
-release-patch:
-	@$(MAKE) release TYPE=patch
 
 ## latest — print the most recent version tag
 latest:
