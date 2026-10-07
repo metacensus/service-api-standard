@@ -1,17 +1,11 @@
 #!/bin/bash
-#
-# Version management.
 
 set -euo pipefail
 
-# Strict semver, nothing else: release.yml fires on `v[0-9]+.[0-9]+.[0-9]+`
-# alone, so a prerelease or build-metadata tag would be created and pushed and
-# publish nothing -- a silent no-op release.
+# Must match release.yml's tag filter, or the tag publishes nothing.
 VERSION_REGEX="^v?[0-9]+\.[0-9]+\.[0-9]+$"
 
-# Latest released version, without the leading `v`. Empty if there is none.
-#
-# `|| true`: grep exits 1 on no tags, which pipefail and set -e would turn into a silent exit.
+# grep exits 1 when no tag matches.
 get_latest_version() {
     git tag -l "v*" | { grep -E "$VERSION_REGEX" || true; } | sed 's/^v//' | sort -V | tail -1
 }
@@ -33,10 +27,6 @@ bump_version() {
     }'
 }
 
-# determine_version [VERSION] [TYPE]
-#
-# With VERSION, validates and echoes it. Without, bumps the latest tag by TYPE.
-# The first release of a repository with no tags is 1.0.0.
 determine_version() {
     local version=${1:-}
     local type=${2:-}
