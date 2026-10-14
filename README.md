@@ -32,7 +32,7 @@ DATABASE_URL=postgres://postgres:dev@localhost:5432/postgres make run
 
 ## Releasing
 
-`make release TYPE=patch|minor|major` tags and pushes; `release.yml` re-runs CI at the tag and publishes `docker.io/metacensus/service-api-standard` for amd64 and arm64. It needs the `DOCKERHUB_TOKEN` secret, a Docker Hub organization access token with write access to that repository.
+`make release TYPE=patch|minor|major` tags and pushes; `release.yml` re-runs CI at the tag and publishes `docker.io/metacensus/service-api-standard` for amd64 and arm64. It logs in through the `github-service-api-standard` OIDC connection in the Docker organization, so no secret is stored.
 
 ## License
 
