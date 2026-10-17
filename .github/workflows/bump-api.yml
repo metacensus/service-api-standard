@@ -1,0 +1,141 @@
+name: Bump metacensus/api
+
+# Opens a pull request bumping github.com/metacensus/api to a released
+# version and turns on auto-merge, so it lands once Pull request success
+# passes. metacensus/api's release workflow sends `api-release`
+# (metacensus/api#79); "Run workflow" re-drives a version by hand. A bump
+# that fails CI stays open for a person: adapting to a breaking release is
+# out of scope (metacensus/api#78).
+
+on:
+  repository_dispatch:
+    types: [api-release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "metacensus/api version to bump to, e.g. v0.8.0"
+        required: true
+        type: string
+
+# Serialised so two releases in quick succession can't race the
+# supersede sweep below; neither is cancelled.
+concurrency:
+  group: bump-api
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    name: Bump metacensus/api
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate the version
+        id: version
+        env:
+          VERSION: ${{ github.event.client_payload.version || inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$VERSION' is not a release version (vX.Y.Z)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # GITHUB_TOKEN would do for the push, but a pull request it opens
+      # runs no workflows, so the required check would never report.
+      - name: Mint the release-bot token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app.outputs.token }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # A late dispatch for an older release must not replace a newer bump,
+      # merged or still open. An open bump for this same version is rebuilt.
+      - name: Skip unless newer than main and every open bump
+        id: newer
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          at_most() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }
+          current=$(go list -m -f '{{.Version}}' github.com/metacensus/api)
+          newest=$current
+          if at_most "$VERSION" "$current"; then
+            bump=false
+          else
+            bump=true
+            for open in $(gh pr list --state open --json headRefName \
+                -q '.[].headRefName | select(startswith("deps/api-")) | ltrimstr("deps/api-")'); do
+              if [ "$open" != "$VERSION" ] && at_most "$VERSION" "$open"; then
+                bump=false
+                newest=$open
+              fi
+            done
+          fi
+          if [ "$bump" = false ]; then
+            echo "metacensus/api $VERSION is not newer than $newest; nothing to do."
+          fi
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+
+      # The module proxy indexes a new tag asynchronously, so the first
+      # attempts right after a release can miss it.
+      - name: Bump the module
+        if: steps.newer.outputs.bump == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if go get "github.com/metacensus/api@$VERSION"; then
+              go mod tidy
+              exit 0
+            fi
+            echo "not resolvable yet; retrying in 30s ($i/10)"
+            sleep 30
+          done
+          echo "::error::github.com/metacensus/api@$VERSION never resolved"
+          exit 1
+
+      - name: Open the pull request and enable auto-merge
+        if: steps.newer.outputs.bump == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          branch="deps/api-$VERSION"
+          bot_id=$(gh api "/users/${APP_SLUG}%5Bbot%5D" -q .id)
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          git switch -c "$branch"
+          git commit -am "Bump metacensus/api to $VERSION."
+          # Forced: a re-run rebuilds the bump on today's main.
+          git push --force origin "$branch"
+
+          pr=$(gh pr list --head "$branch" --state open --json number -q '.[0].number')
+          if [ -z "$pr" ]; then
+            gh pr create --base main --head "$branch" \
+              --title "Bump metacensus/api to $VERSION" \
+              --body "Opened by \`bump-api.yml\` for the metacensus/api $VERSION release ([notes](https://github.com/metacensus/api/releases/tag/$VERSION)). It merges itself once Pull request success passes; if CI fails, it waits for a person."
+            pr=$(gh pr list --head "$branch" --state open --json number -q '.[0].number')
+          fi
+
+          for old in $(gh pr list --state open --json headRefName \
+              -q '.[].headRefName | select(startswith("deps/api-"))'); do
+            if [ "$old" != "$branch" ]; then
+              gh pr close "$old" --delete-branch --comment "Superseded by #$pr."
+            fi
+          done
+
+          gh pr merge "$pr" --auto --squash
