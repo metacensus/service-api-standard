@@ -18,7 +18,10 @@ jobs:
   pull-request:
     name: Pull request success
     needs: build
+    # A skipped required check reads as passing, so this runs and fails instead.
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: "true"
+      - if: needs.build.result != 'success'
+        run: exit 1
