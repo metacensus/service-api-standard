@@ -14,6 +14,7 @@ The MetaCensus API over Postgres. It implements [`metacensus/api`](https://githu
 | Variable | Default | |
 |---|---|---|
 | `DATABASE_URL` | — | Required. A Postgres connection string; it carries the password. |
+| `ALLOWED_ORIGINS` | — | Required. Comma-separated WebAuthn origins a participant signature may name. |
 | `PORT` | `3001` | |
 
 The service refuses to start on invalid configuration, an unreachable database or a failed migration. Migrations run at boot.
@@ -25,7 +26,7 @@ docker run -d --name mc-postgres -e POSTGRES_PASSWORD=dev -p 5432:5432 postgres:
 ```
 
 ```bash
-DATABASE_URL=postgres://postgres:dev@localhost:5432/postgres make run
+DATABASE_URL=postgres://postgres:dev@localhost:5432/postgres ALLOWED_ORIGINS=http://localhost:5173 make run
 ```
 
 `make help` lists every target; `make check` runs what CI runs.
