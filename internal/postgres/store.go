@@ -3,6 +3,7 @@ package postgres
 
 import (
 	"context"
+	"crypto/ecdsa"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,13 +14,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Store verifies signatures softly: a user signature must be present for its key_id to resolve, not stand.
-type Store struct{ pool *pgxpool.Pool }
+// Store refuses a write whose user signature does not stand.
+type Store struct {
+	pool   *pgxpool.Pool
+	policy signing.Policy
+}
 
 var _ store.Store = (*Store)(nil)
 
 // New returns a Store over pool; Migrate must already have run.
-func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+func New(pool *pgxpool.Pool, policy signing.Policy) *Store { return &Store{pool: pool, policy: policy} }
 
 func (s *Store) EnrollUser(ctx context.Context, record *v1.UserSigned, publicKey, passwordHash string) error {
 	const op = "EnrollUser"
@@ -27,8 +31,12 @@ func (s *Store) EnrollUser(ctx context.Context, record *v1.UserSigned, publicKey
 		return err
 	}
 	keyID := record.GetUserSignature().GetKeyId()
-	if _, err := signing.EnrolledKey(publicKey, keyID); err != nil {
+	pub, err := signing.EnrolledKey(publicKey, keyID)
+	if err != nil {
 		return store.InvalidContent
+	}
+	if err := verify(s, op, pub, record); err != nil {
+		return err
 	}
 	doc, err := contract.Marshal(record)
 	if err != nil {
@@ -67,7 +75,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]*v1.UserSigned, error) {
 }
 
 func (s *Store) CreateTopic(ctx context.Context, callerID string, record *v1.TopicSigned) error {
-	return write(ctx, s.pool, "CreateTopic", callerID, record, func(tx pgx.Tx, doc []byte) error {
+	return write(ctx, s, "CreateTopic", callerID, record, func(tx pgx.Tx, doc []byte) error {
 		if _, err := store.ParseID(store.TopicID, record.GetId()); err != nil {
 			return err
 		}
@@ -85,7 +93,7 @@ func (s *Store) ListTopics(ctx context.Context) ([]*v1.TopicSigned, error) {
 }
 
 func (s *Store) CreateProp(ctx context.Context, callerID string, record *v1.PropSigned) error {
-	return write(ctx, s.pool, "CreateProp", callerID, record, func(tx pgx.Tx, doc []byte) error {
+	return write(ctx, s, "CreateProp", callerID, record, func(tx pgx.Tx, doc []byte) error {
 		if _, err := store.ParseID(store.PropID, record.GetId()); err != nil {
 			return err
 		}
@@ -107,7 +115,7 @@ func (s *Store) ListProps(ctx context.Context, topicID string) ([]*v1.PropSigned
 }
 
 func (s *Store) SetVote(ctx context.Context, callerID string, record *v1.VoteSigned) error {
-	return write(ctx, s.pool, "SetVote", callerID, record, func(tx pgx.Tx, doc []byte) error {
+	return write(ctx, s, "SetVote", callerID, record, func(tx pgx.Tx, doc []byte) error {
 		if err := validateVote(callerID, record); err != nil {
 			return err
 		}
@@ -153,7 +161,7 @@ func (s *Store) FindPublication(ctx context.Context, doi, pmid string) (*v1.Publ
 }
 
 func (s *Store) CreatePaper(ctx context.Context, callerID string, record *v1.PaperSigned) error {
-	return write(ctx, s.pool, "CreatePaper", callerID, record, func(tx pgx.Tx, doc []byte) error {
+	return write(ctx, s, "CreatePaper", callerID, record, func(tx pgx.Tx, doc []byte) error {
 		if _, err := store.ParseID(store.PaperID, record.GetId()); err != nil {
 			return err
 		}
@@ -180,23 +188,31 @@ func (s *Store) FindPaper(ctx context.Context, topicID, publicationID string) (*
 		`SELECT record FROM papers WHERE topic_id = $1 AND publication_id = $2`, topicID, publicationID)
 }
 
-// signed is a record carrying the signature whose key_id write resolves.
-type signed interface {
+type signed[C proto.Message] interface {
 	proto.Message
+	GetContent() C
+	GetInterpretation() *v1.Interpretation
 	GetUserSignature() *v1.Signature
 }
 
-// write runs fn in a transaction after the signature's key_id is shown to
-// belong to callerID, so Unauthenticated outranks every other refusal,
-// including a record that cannot be marshalled. fn receives the marshalled record.
-func write[R signed](ctx context.Context, pool *pgxpool.Pool, op, callerID string, record R, fn func(tx pgx.Tx, doc []byte) error) error {
-	return fail(op, pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		var owner string
-		err := tx.QueryRow(ctx, `SELECT user_id FROM user_keys WHERE key_id = $1`, record.GetUserSignature().GetKeyId()).Scan(&owner)
+// write runs fn, with the marshalled record, in a transaction once the
+// signature is shown to be callerID's (else Unauthenticated) and to stand (else
+// SignatureInvalid); those two refusals outrank every other, in that order.
+func write[C proto.Message](ctx context.Context, s *Store, op, callerID string, record signed[C], fn func(tx pgx.Tx, doc []byte) error) error {
+	return fail(op, pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var owner, publicKey string
+		err := tx.QueryRow(ctx, `SELECT user_id, public_key FROM user_keys WHERE key_id = $1`, record.GetUserSignature().GetKeyId()).Scan(&owner, &publicKey)
 		if kindOf(err) == store.NotFound || (err == nil && owner != callerID) {
 			return store.Unauthenticated
 		}
 		if err != nil {
+			return err
+		}
+		pub, err := signing.DecodePublicKey(publicKey)
+		if err != nil {
+			return err
+		}
+		if err := verify(s, op, pub, record); err != nil {
 			return err
 		}
 		doc, err := contract.Marshal(record)
@@ -205,6 +221,13 @@ func write[R signed](ctx context.Context, pool *pgxpool.Pool, op, callerID strin
 		}
 		return fn(tx, doc)
 	}))
+}
+
+func verify[C proto.Message](s *Store, op string, pub *ecdsa.PublicKey, record signed[C]) error {
+	if err := signing.VerifyUser(pub, record.GetContent(), record.GetInterpretation(), record.GetUserSignature(), s.policy); err != nil {
+		return store.Errf(store.SignatureInvalid, op, err)
+	}
+	return nil
 }
 
 // one returns the single record sql selects, or store.NotFound.
