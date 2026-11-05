@@ -1,6 +1,6 @@
 .PHONY: help build run test test-race test-adapter test-artifact test-integration \
         fmt fmt-check vet tidy-check golangci vuln lint check hooks docker-build \
-        release latest
+        release latest api-check
 
 .DEFAULT_GOAL := help
 
@@ -55,6 +55,21 @@ test-artifact:
 
 ## test-integration — the adapter suite, then the artifact suite
 test-integration: test-adapter test-artifact
+
+## api-check — what an api change can break here: build, unit tests, storetest (needs Docker)
+#
+# storetest runs at the stage STORETEST_STAGE names. Every go test run writes
+# its -json output to API_CHECK_JSON, which api's conformance workflow reads.
+# Nothing that reflects only this service's own state (lint, format, vuln
+# scan, image, artifact suite) runs, so a red result is the api change's.
+API_CHECK_JSON ?= bin/api-check.json
+api-check:
+	@mkdir -p "$$(dirname '$(API_CHECK_JSON)')"; : > '$(API_CHECK_JSON)'; status=0; \
+	go build ./... || exit 1; \
+	go test -json -count=1 ./... >> '$(API_CHECK_JSON)' || status=1; \
+	go test -json -tags=integration -count=1 -timeout 15m -run '^TestStore_Conformance$$' ./internal/postgres/ >> '$(API_CHECK_JSON)' || status=1; \
+	echo "api-check: go test -json in $(API_CHECK_JSON)"; \
+	exit $$status
 
 ## fmt — rewrite with gofmt
 fmt:
