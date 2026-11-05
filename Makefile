@@ -58,8 +58,8 @@ test-integration: test-adapter test-artifact
 
 ## api-check — what an api change can break here: build, unit tests, storetest (needs Docker)
 #
-# storetest runs at the stage STORETEST_STAGE names. Every go test run writes
-# its -json output to API_CHECK_JSON, which api's conformance workflow reads.
+# Every go test run writes its -json output to API_CHECK_JSON, which api's
+# conformance workflow reads.
 # Nothing that reflects only this service's own state (lint, format, vuln
 # scan, image, artifact suite) runs, so a red result is the api change's.
 API_CHECK_JSON ?= bin/api-check.json
