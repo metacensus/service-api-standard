@@ -32,7 +32,7 @@ DATABASE_URL=postgres://postgres:dev@localhost:5432/postgres make run
 
 ## Releasing
 
-`make release TYPE=patch|minor|major` tags and pushes; `release.yml` re-runs CI at the tag and publishes `docker.io/metacensus/service-api-standard` for amd64 and arm64. It logs in through the `github-service-api-standard` OIDC connection in the Docker organization, so no secret is stored.
+`make release TYPE=patch|minor|major` tags and pushes; `release.yml` re-runs CI at the tag and publishes `docker.io/metacensus/service-api-standard` for amd64 and arm64. It logs in through the `github-service-api-standard` OIDC connection in the Docker organization, so no secret is stored. It refuses while `go.mod` requires an unreleased `github.com/metacensus/api`. Each api release opens a `deps/api-vX.Y.Z` pull request here that merges itself once CI passes ([metacensus/api#97](https://github.com/metacensus/api/issues/97)); one that fails CI waits for a person.
 
 ## License
 
