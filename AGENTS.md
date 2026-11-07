@@ -2,7 +2,7 @@
 
 Decisions with no single declaration to sit beside. Per-declaration detail is a comment beside the code; the [README](README.md) orients an operator.
 
-A route is added in the contract first, then given a store method here.
+A route is added in the contract first, then given a store method here. A new `store.Store` method reaches this repo last: service-api-chain implements it before api declares it, and this repo implements it in the bump pull request that brings the api release carrying it ([metacensus/api#97](https://github.com/metacensus/api/issues/97)). Nothing here gates an api change.
 
 ## Storage: whole records, constraint columns
 
