@@ -103,11 +103,16 @@ docker-build:
 VERSION ?=
 TYPE    ?= patch
 
-## release — tag and push the next version (TYPE=patch|minor|major, or VERSION=1.2.3)
+## release — refuse an unreleased metacensus/api, then tag and push the next version (TYPE=patch|minor|major, or VERSION=1.2.3)
 release:
 	@set -e; \
 	VERSION=$$(./scripts/version.sh "$(VERSION)" "$(TYPE)"); \
 	TAG="v$$VERSION"; \
+	API=$$(GOWORK=off go list -m -f '{{.Version}}{{with .Replace}} => {{.Path}} {{.Version}}{{end}}' github.com/metacensus/api); \
+	if printf '%s' "$$API" | grep -Eq '[0-9]{14}-[0-9a-f]{12}|=>'; then \
+		echo "Error: go.mod requires github.com/metacensus/api $$API, not a release; refusing to tag"; \
+		exit 1; \
+	fi; \
 	MSG="Release $$VERSION"; \
 	if git ls-remote --exit-code --tags origin "refs/tags/$$TAG" >/dev/null 2>&1; then \
 		echo "Error: Tag $$TAG already exists on origin"; \
