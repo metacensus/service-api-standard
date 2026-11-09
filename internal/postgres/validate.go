@@ -22,3 +22,21 @@ func validateVote(callerID string, v *v1.VoteSigned) error {
 	}
 	return nil
 }
+
+// validatePublication refuses a publication with neither external id.
+func validatePublication(p *v1.Publication) error {
+	if p.GetDoi() == "" && p.GetPmid() == "" {
+		return store.InvalidContent
+	}
+	return nil
+}
+
+// validatePaper refuses a paper missing either id; one naming a missing
+// record is the foreign keys' to refuse.
+func validatePaper(p *v1.PaperSigned) error {
+	c := p.GetContent()
+	if c.GetTopicId() == "" || c.GetPublicationId() == "" {
+		return store.InvalidContent
+	}
+	return nil
+}
