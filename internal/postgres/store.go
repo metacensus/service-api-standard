@@ -124,6 +124,58 @@ func (s *Store) ListVotes(ctx context.Context, topicID, propID string) ([]*v1.Vo
 		`SELECT record FROM votes WHERE topic_id = $1 AND prop_id = $2 ORDER BY user_id`, topicID, propID)
 }
 
+func (s *Store) CreatePublication(ctx context.Context, record *v1.Publication) error {
+	const op = "CreatePublication"
+	if _, err := store.ParseID(store.PublicationID, record.GetId()); err != nil {
+		return err
+	}
+	if err := validatePublication(record); err != nil {
+		return err
+	}
+	doc, err := contract.Marshal(record)
+	if err != nil {
+		return fail(op, err)
+	}
+	_, err = s.pool.Exec(ctx, `INSERT INTO publications (id, doi, pmid, record) VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), $4)`,
+		record.GetId(), record.GetDoi(), record.GetPmid(), doc)
+	return fail(op, err)
+}
+
+func (s *Store) GetPublication(ctx context.Context, id string) (*v1.Publication, error) {
+	return one(ctx, s.pool, "GetPublication", &v1.Publication{}, `SELECT record FROM publications WHERE id = $1`, id)
+}
+
+// FindPublication orders the DOI's holder first; an empty argument matches
+// nothing, since an absent id is stored as NULL.
+func (s *Store) FindPublication(ctx context.Context, doi, pmid string) (*v1.Publication, error) {
+	return one(ctx, s.pool, "FindPublication", &v1.Publication{},
+		`SELECT record FROM publications WHERE doi = $1 OR pmid = $2 ORDER BY (doi = $1) IS TRUE DESC LIMIT 1`, doi, pmid)
+}
+
+func (s *Store) CreatePaper(ctx context.Context, callerID string, record *v1.PaperSigned) error {
+	return write(ctx, s.pool, "CreatePaper", callerID, record, func(tx pgx.Tx, doc []byte) error {
+		if _, err := store.ParseID(store.PaperID, record.GetId()); err != nil {
+			return err
+		}
+		if err := validatePaper(record); err != nil {
+			return err
+		}
+		c := record.GetContent()
+		_, err := tx.Exec(ctx, `INSERT INTO papers (topic_id, id, publication_id, record) VALUES ($1, $2, $3, $4)`,
+			c.GetTopicId(), record.GetId(), c.GetPublicationId(), doc)
+		return err
+	})
+}
+
+func (s *Store) GetPaper(ctx context.Context, topicID, paperID string) (*v1.PaperSigned, error) {
+	return one(ctx, s.pool, "GetPaper", &v1.PaperSigned{}, `SELECT record FROM papers WHERE topic_id = $1 AND id = $2`, topicID, paperID)
+}
+
+func (s *Store) FindPaper(ctx context.Context, topicID, publicationID string) (*v1.PaperSigned, error) {
+	return one(ctx, s.pool, "FindPaper", &v1.PaperSigned{},
+		`SELECT record FROM papers WHERE topic_id = $1 AND publication_id = $2`, topicID, publicationID)
+}
+
 // signed is a record carrying the signature whose key_id write resolves.
 type signed interface {
 	proto.Message
