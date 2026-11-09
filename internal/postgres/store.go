@@ -171,6 +171,10 @@ func (s *Store) GetPaper(ctx context.Context, topicID, paperID string) (*v1.Pape
 	return one(ctx, s.pool, "GetPaper", &v1.PaperSigned{}, `SELECT record FROM papers WHERE topic_id = $1 AND id = $2`, topicID, paperID)
 }
 
+func (s *Store) ListPapers(ctx context.Context, topicID string) ([]*v1.PaperSigned, error) {
+	return many(ctx, s.pool, "ListPapers", func() *v1.PaperSigned { return &v1.PaperSigned{} }, `SELECT record FROM papers WHERE topic_id = $1 ORDER BY id`, topicID)
+}
+
 func (s *Store) FindPaper(ctx context.Context, topicID, publicationID string) (*v1.PaperSigned, error) {
 	return one(ctx, s.pool, "FindPaper", &v1.PaperSigned{},
 		`SELECT record FROM papers WHERE topic_id = $1 AND publication_id = $2`, topicID, publicationID)
