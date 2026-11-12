@@ -14,7 +14,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Store refuses a write whose user signature does not stand.
 type Store struct {
 	pool   *pgxpool.Pool
 	policy signing.Policy
@@ -195,9 +194,7 @@ type signed[C proto.Message] interface {
 	GetUserSignature() *v1.Signature
 }
 
-// write runs fn, with the marshalled record, in a transaction once the
-// signature is shown to be callerID's (else Unauthenticated) and to stand (else
-// SignatureInvalid); those two refusals outrank every other, in that order.
+// write runs fn with the marshalled record once the signature is callerID's and stands.
 func write[C proto.Message](ctx context.Context, s *Store, op, callerID string, record signed[C], fn func(tx pgx.Tx, doc []byte) error) error {
 	return fail(op, pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var owner, publicKey string
