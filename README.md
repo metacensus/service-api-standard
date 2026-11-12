@@ -32,7 +32,7 @@ DATABASE_URL=postgres://postgres:dev@localhost:5432/postgres make run
 
 ## Releasing
 
-`make release TYPE=patch|minor|major` tags and pushes; `release.yml` re-runs CI at the tag and publishes `docker.io/metacensus/service-api-standard` for amd64 and arm64. It logs in through the `github-service-api-standard` OIDC connection in the Docker organization, so no secret is stored. It refuses while `go.mod` requires an unreleased `github.com/metacensus/api`. Each api release opens a `deps/api-vX.Y.Z` pull request here that merges itself once CI passes ([metacensus/api#97](https://github.com/metacensus/api/issues/97)); one that fails CI waits for a person.
+`make release TYPE=patch|minor|major` tags and pushes; `release.yml` re-runs CI at the tag and publishes `docker.io/metacensus/service-api-standard` for amd64 and arm64. It logs in through the `github-service-api-standard` OIDC connection in the Docker organization, so no secret is stored. It refuses while `go.mod` requires an unreleased `github.com/metacensus/api`. Each api release opens a `deps/api-vX.Y.Z` pull request here that merges itself once CI passes ([metacensus/api#97](https://github.com/metacensus/api/issues/97)); one that fails CI waits for a person. Every push to `main`, once CI passes, pushes a linux/arm64 image tagged `sha-<short>` and `main` to the private ECR repository `metacensus/service-api-standard` rather than Docker Hub, for environments that track `main`; `main.yml` signs in through the role in the repository variable `MAIN_IMAGE_ROLE_ARN`, from metacensus/terraform's `aws/`.
 
 ## License
 

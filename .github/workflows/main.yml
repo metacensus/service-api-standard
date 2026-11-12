@@ -14,3 +14,95 @@ permissions:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
+
+  # Main builds go to this app's private ECR repository, for environments that
+  # track main; releases go to public Docker Hub (release.yml).
+  publish:
+    name: Publish main to ECR
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-2
+      ECR_REPOSITORY: metacensus/service-api-standard
+    steps:
+      - name: Require the push role
+        env:
+          MAIN_IMAGE_ROLE_ARN: ${{ vars.MAIN_IMAGE_ROLE_ARN }}
+        run: |
+          if [ -z "$MAIN_IMAGE_ROLE_ARN" ]; then
+            echo "::error title=Missing variable::MAIN_IMAGE_ROLE_ARN is not set. Set it to this app's push role from metacensus/terraform's aws/ main_images output: gh variable set MAIN_IMAGE_ROLE_ARN --repo metacensus/service-api-standard --body <arn>"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      # A re-run of an older main run must not move main back to its commit.
+      - name: Check this commit is main's head
+        id: head
+        run: |
+          head=$(git ls-remote origin refs/heads/main | awk '$2 == "refs/heads/main" {print $1}')
+          echo "current=$([ "$head" = "$GITHUB_SHA" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.MAIN_IMAGE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      # sha- tags are immutable and every build has a new digest, so a re-run for
+      # a commit already in ECR reuses its image rather than pushing another.
+      - name: Look for this commit's image
+        id: existing
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          tag="sha-${GITHUB_SHA::7}"
+          image="$REGISTRY/$ECR_REPOSITORY:$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if out=$(docker buildx imagetools inspect "$image" 2>&1); then
+            echo "image=$image" >> "$GITHUB_OUTPUT"
+          elif ! grep -qi 'not found' <<<"$out"; then
+            echo "$out" >&2
+            exit 1
+          fi
+
+      - name: Point main at the existing image
+        if: steps.existing.outputs.image != '' && steps.head.outputs.current == 'true'
+        env:
+          IMAGE: ${{ steps.existing.outputs.image }}
+        run: docker buildx imagetools create --prefer-index=false --tag "${IMAGE%:*}:main" "$IMAGE"
+
+      - name: Extract metadata for Docker
+        if: steps.existing.outputs.image == ''
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ steps.existing.outputs.tag }}
+            type=ref,event=branch,enable=${{ steps.head.outputs.current == 'true' }}
+
+      # One platform, the nodes', and no attestations: the push is a single
+      # manifest rather than an index, so the repository's untagged-image expiry
+      # can't remove a platform an index still references.
+      - name: Build and push
+        if: steps.existing.outputs.image == ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          provenance: false
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
