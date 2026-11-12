@@ -39,7 +39,7 @@ jobs:
         id: head
         if: github.ref == 'refs/heads/main'
         run: |
-          head=$(git ls-remote origin refs/heads/main | cut -f1)
+          head=$(git ls-remote origin refs/heads/main | awk '$2 == "refs/heads/main" {print $1}')
           echo "current=$([ "$head" = "$GITHUB_SHA" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata for Docker
