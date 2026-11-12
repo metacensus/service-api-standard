@@ -54,17 +54,20 @@ func TestKindOf(t *testing.T) {
 func TestFail(t *testing.T) {
 	cause := &pgconn.PgError{Code: "23505"}
 	other := errors.New("boom")
+	refused := store.Errf(store.SignatureInvalid, "Inner", other)
 
 	tests := []struct {
-		name      string
-		err       error
-		wantKind  store.Kind
-		wantCause error
+		name        string
+		err         error
+		wantKind    store.Kind
+		wantCause   error
+		passThrough bool
 	}{
-		{"success - nil stays nil", nil, "", nil},
-		{"success - kind keeps its cause for logs", cause, store.AlreadyExists, cause},
-		{"success - bare kind passes through", store.Unauthenticated, store.Unauthenticated, nil},
-		{"error - unknown error stays kindless but wrapped", other, "", other},
+		{"success - nil stays nil", nil, "", nil, true},
+		{"success - kind keeps its cause for logs", cause, store.AlreadyExists, cause, false},
+		{"success - bare kind passes through", store.Unauthenticated, store.Unauthenticated, nil, true},
+		{"success - store error passes through", refused, store.SignatureInvalid, other, true},
+		{"error - unknown error stays kindless but wrapped", other, "", other, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -72,8 +75,8 @@ func TestFail(t *testing.T) {
 			if k := store.KindOf(got); k != tt.wantKind {
 				t.Errorf("kind = %q, want %q", k, tt.wantKind)
 			}
-			if tt.err == nil && got != nil {
-				t.Errorf("fail(nil) = %v, want nil", got)
+			if tt.passThrough && got != tt.err {
+				t.Errorf("fail(%v) = %v, want it unwrapped", tt.err, got)
 			}
 			if tt.wantCause != nil && !errors.Is(got, tt.wantCause) {
 				t.Errorf("%v does not wrap %v", got, tt.wantCause)
