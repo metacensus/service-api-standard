@@ -66,16 +66,21 @@ jobs:
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
-          image="$REGISTRY/$ECR_REPOSITORY:sha-${GITHUB_SHA::7}"
-          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+          tag="sha-${GITHUB_SHA::7}"
+          image="$REGISTRY/$ECR_REPOSITORY:$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if out=$(docker buildx imagetools inspect "$image" 2>&1); then
             echo "image=$image" >> "$GITHUB_OUTPUT"
+          elif ! grep -qi 'not found' <<<"$out"; then
+            echo "$out" >&2
+            exit 1
           fi
 
       - name: Point main at the existing image
         if: steps.existing.outputs.image != '' && steps.head.outputs.current == 'true'
         env:
           IMAGE: ${{ steps.existing.outputs.image }}
-        run: docker buildx imagetools create --tag "${IMAGE%:*}:main" "$IMAGE"
+        run: docker buildx imagetools create --prefer-index=false --tag "${IMAGE%:*}:main" "$IMAGE"
 
       - name: Extract metadata for Docker
         if: steps.existing.outputs.image == ''
@@ -85,7 +90,7 @@ jobs:
           images: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
           flavor: latest=false
           tags: |
-            type=sha,format=short
+            type=raw,value=${{ steps.existing.outputs.tag }}
             type=ref,event=branch,enable=${{ steps.head.outputs.current == 'true' }}
 
       # One platform, the nodes', and no attestations: the push is a single
