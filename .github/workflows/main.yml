@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
 
+# A newer push cancels an older run, so main on Docker Hub never moves back to
+# an older commit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -14,3 +16,11 @@ permissions:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
+
+  publish:
+    name: Publish
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish.yml
