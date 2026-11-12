@@ -59,7 +59,26 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
+      # sha- tags are immutable and every build has a new digest, so a re-run for
+      # a commit already in ECR reuses its image rather than pushing another.
+      - name: Look for this commit's image
+        id: existing
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          image="$REGISTRY/$ECR_REPOSITORY:sha-${GITHUB_SHA::7}"
+          if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            echo "image=$image" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Point main at the existing image
+        if: steps.existing.outputs.image != '' && steps.head.outputs.current == 'true'
+        env:
+          IMAGE: ${{ steps.existing.outputs.image }}
+        run: docker buildx imagetools create --tag "${IMAGE%:*}:main" "$IMAGE"
+
       - name: Extract metadata for Docker
+        if: steps.existing.outputs.image == ''
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -73,6 +92,7 @@ jobs:
       # manifest rather than an index, so the repository's untagged-image expiry
       # can't remove a platform an index still references.
       - name: Build and push
+        if: steps.existing.outputs.image == ''
         uses: docker/build-push-action@v6
         with:
           context: .
