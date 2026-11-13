@@ -4,9 +4,11 @@ on:
   push:
     branches: [main]
 
+# A newer run waits for an older one rather than cancelling it, so it never
+# stops a staging rollout midway.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -106,3 +108,42 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # The rollout role may only restart this app's Deployment in staging; with
+  # pull Always, the restart runs the image publish just moved main to.
+  restart-staging:
+    name: Restart staging
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+    env:
+      AWS_REGION: us-east-2
+      CLUSTER: metacensus-main
+      NAMESPACE: staging
+      DEPLOYMENT: service-api-standard
+    steps:
+      - name: Require the rollout role
+        env:
+          STAGING_ROLLOUT_ROLE_ARN: ${{ vars.STAGING_ROLLOUT_ROLE_ARN }}
+        run: |
+          if [ -z "$STAGING_ROLLOUT_ROLE_ARN" ]; then
+            echo "::error title=Missing variable::STAGING_ROLLOUT_ROLE_ARN is not set. Set it to this app's role from metacensus/terraform's aws/ staging_rollout output: gh variable set STAGING_ROLLOUT_ROLE_ARN --repo metacensus/service-api-standard --body <arn>"
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.STAGING_ROLLOUT_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Connect to the cluster
+        run: aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
+
+      - name: Restart
+        run: kubectl --namespace "$NAMESPACE" rollout restart "deployment/$DEPLOYMENT"
+
+      # The Deployment's progress deadline fails a rollout that stalls.
+      - name: Wait for the rollout
+        run: kubectl --namespace "$NAMESPACE" rollout status "deployment/$DEPLOYMENT" --timeout=10m
