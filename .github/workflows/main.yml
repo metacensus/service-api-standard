@@ -13,6 +13,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  AWS_REGION: us-east-2
+
 jobs:
   build:
     uses: ./.github/workflows/build.yml
@@ -24,11 +27,12 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      current: ${{ steps.head.outputs.current }}
     permissions:
       contents: read
       id-token: write
     env:
-      AWS_REGION: us-east-2
       ECR_REPOSITORY: metacensus/service-api-standard
     steps:
       - name: Require the push role
@@ -110,16 +114,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   # The rollout role may only restart this app's Deployment in staging; with
-  # pull Always, the restart runs the image publish just moved main to.
+  # pull Always, the restart runs the image publish just moved main to. A run
+  # for a commit that is no longer main's head moved nothing, so it skips this.
   restart-staging:
     name: Restart staging
     needs: publish
+    if: needs.publish.outputs.current == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       id-token: write
     env:
-      AWS_REGION: us-east-2
       CLUSTER: metacensus-main
       NAMESPACE: staging
       DEPLOYMENT: service-api-standard
