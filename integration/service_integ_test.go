@@ -35,9 +35,6 @@ const (
 	dbHost = "postgres"
 	dbURL  = "postgres://service:service@" + dbHost + ":5432/service?sslmode=disable"
 
-	// What a participant's assertions carry. The Postgres store checks that an
-	// assertion is present, not that it stands (storetest.Soft), so these only
-	// need to be self-consistent.
 	rpID   = "integration.invalid"
 	origin = "https://" + rpID
 
@@ -121,7 +118,8 @@ func TestRefusesToBoot(t *testing.T) {
 	}{
 		{"error - no DATABASE_URL", map[string]string{}},
 		{"error - Postgres unreachable", map[string]string{
-			"DATABASE_URL": "postgres://service:service@127.0.0.1:1/service?sslmode=disable&connect_timeout=3",
+			"DATABASE_URL":    "postgres://service:service@127.0.0.1:1/service?sslmode=disable&connect_timeout=3",
+			"ALLOWED_ORIGINS": origin,
 		}},
 	}
 
@@ -148,7 +146,7 @@ func TestServes(t *testing.T) {
 	netName := newNetwork(t, ctx)
 	startPostgres(t, ctx, netName)
 
-	req := serviceRequest(t, map[string]string{"DATABASE_URL": dbURL},
+	req := serviceRequest(t, map[string]string{"DATABASE_URL": dbURL, "ALLOWED_ORIGINS": origin},
 		wait.ForHTTP("/healthz").WithPort(servicePort).WithStartupTimeout(bootTimeout))
 	req.Networks = []string{netName}
 	container := start(t, ctx, req)

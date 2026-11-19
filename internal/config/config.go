@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -13,7 +14,8 @@ const defaultPort = 3001
 type Config struct {
 	Port int
 	// DatabaseURL is a secret: it carries the Postgres password.
-	DatabaseURL string
+	DatabaseURL    string
+	AllowedOrigins []string
 }
 
 // configError carries every problem found in one pass, so a container that refuses
@@ -44,8 +46,27 @@ func Load(getenv func(string) string) (*Config, error) {
 		problems = append(problems, "DATABASE_URL is required")
 	}
 
+	var origins []string
+	if raw := strings.TrimSpace(getenv("ALLOWED_ORIGINS")); raw == "" {
+		problems = append(problems, "ALLOWED_ORIGINS is required")
+	} else {
+		for _, o := range strings.Split(raw, ",") {
+			o = strings.TrimSpace(o)
+			if !isOrigin(o) {
+				problems = append(problems, fmt.Sprintf("ALLOWED_ORIGINS entry %q must be an origin, scheme://host[:port] with no path", o))
+				continue
+			}
+			origins = append(origins, o)
+		}
+	}
+
 	if len(problems) > 0 {
 		return nil, &configError{Problems: problems}
 	}
-	return &Config{Port: port, DatabaseURL: dsn}, nil
+	return &Config{Port: port, DatabaseURL: dsn, AllowedOrigins: origins}, nil
+}
+
+func isOrigin(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.Scheme+"://"+u.Host == s && u.Hostname() != ""
 }

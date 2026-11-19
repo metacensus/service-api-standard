@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/metacensus/api/go/service"
+	"github.com/metacensus/api/go/signing"
 
 	"github.com/metacensus/service-api-standard/internal/config"
 	"github.com/metacensus/service-api-standard/internal/postgres"
@@ -44,7 +45,7 @@ func run(logger *slog.Logger) int {
 	}
 	defer pool.Close()
 
-	handlers := service.New(service.Config{Store: postgres.New(pool)})
+	handlers := service.New(service.Config{Store: postgres.New(pool, signing.ParticipantPolicy(cfg.AllowedOrigins...))})
 	if err := server.New(cfg.Port, handlers, logger).Run(ctx); err != nil {
 		logger.Error("server stopped", slog.String("error", err.Error()))
 		return 1

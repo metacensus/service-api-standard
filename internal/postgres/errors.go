@@ -48,13 +48,11 @@ func kindOf(err error) store.Kind {
 	return ""
 }
 
-// fail attaches op to err for logs, keeping its Kind if it has one; nil stays nil. A bare
-// Kind (a refusal raised here) passes through unwrapped.
+// fail attaches op to a driver error for logs, keeping its Kind; refusals
+// raised here pass through as they are.
 func fail(op string, err error) error {
-	if err == nil {
-		return nil
-	}
-	if _, bare := err.(store.Kind); bare {
+	switch err.(type) {
+	case nil, store.Kind, *store.Error:
 		return err
 	}
 	if k := kindOf(err); k != "" {
