@@ -24,18 +24,6 @@ jobs:
     env:
       IMAGE: metacensus/service-api-standard
     steps:
-      - name: Require the push role and region
-        env:
-          MAIN_IMAGE_ROLE_ARN: ${{ vars.MAIN_IMAGE_ROLE_ARN }}
-          AWS_REGION: ${{ vars.AWS_REGION }}
-        run: |
-          for v in MAIN_IMAGE_ROLE_ARN AWS_REGION; do
-            if [ -z "${!v}" ]; then
-              echo "::error title=Missing variable::$v is not set: gh variable set $v --repo ${{ github.repository }} --body <value>"
-              exit 1
-            fi
-          done
-
       - uses: actions/checkout@v4
 
       # For the arm64 runtime layer only.
@@ -68,6 +56,18 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Require the push role
+        env:
+          MAIN_IMAGE_ROLE_ARN: ${{ vars.MAIN_IMAGE_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          for v in MAIN_IMAGE_ROLE_ARN AWS_REGION; do
+            if [ -z "${!v}" ]; then
+              echo "::error title=Missing variable::$v is not set: gh variable set $v --repo ${{ github.repository }} --body <value>"
+              exit 1
+            fi
+          done
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
