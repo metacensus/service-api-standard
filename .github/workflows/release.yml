@@ -21,7 +21,21 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      IMAGE: metacensus/service-api-standard
     steps:
+      - name: Require the push role and region
+        env:
+          MAIN_IMAGE_ROLE_ARN: ${{ vars.MAIN_IMAGE_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          for v in MAIN_IMAGE_ROLE_ARN AWS_REGION; do
+            if [ -z "${!v}" ]; then
+              echo "::error title=Missing variable::$v is not set: gh variable set $v --repo ${{ github.repository }} --body <value>"
+              exit 1
+            fi
+          done
+
       - uses: actions/checkout@v4
 
       # For the arm64 runtime layer only.
@@ -39,13 +53,14 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: docker.io/metacensus/service-api-standard
+          images: docker.io/${{ env.IMAGE }}
           tags: |
             type=ref,event=tag
             type=sha,format=short
             type=raw,value=latest
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -53,3 +68,21 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.MAIN_IMAGE_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # A copy of the image just pushed, by digest, so both registries hold one
+      # digest. ECR gets the release tag alone: its sha- tags are main's, and
+      # every ECR tag but main is immutable, latest included.
+      - name: Copy the release to ECR
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: docker buildx imagetools create --tag "$REGISTRY/$IMAGE:$GITHUB_REF_NAME" "docker.io/$IMAGE@$DIGEST"
